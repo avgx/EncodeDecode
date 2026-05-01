@@ -18,16 +18,16 @@ private struct CameraListPage: Codable, Sendable, Equatable {
 }
 
 @Test func bodyDecodeSSE_accumulator_multilineData_joinsWithNewline() {
-    var acc = SSEEventAccumulator()
+    var acc = SSEAccumulator()
     #expect(acc.push("event: msg") == nil)
     #expect(acc.push("data: hello") == nil)
     #expect(acc.push("data: world") == nil)
     let ev = acc.push("")
-    #expect(ev == SSEEvent(id: nil, event: "msg", data: "hello\nworld"))
+    #expect(ev == ServerSentEvent(id: nil, event: "msg", data: "hello\nworld"))
 }
 
 @Test func bodyDecodeSSE_accumulator_finish_flushesLastBlock() {
-    var acc = SSEEventAccumulator()
+    var acc = SSEAccumulator()
     #expect(acc.push("event: x") == nil)
     #expect(acc.push("data: {}") == nil)
     let ev = acc.finish()

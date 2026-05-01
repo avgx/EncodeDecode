@@ -14,7 +14,7 @@ public func decodeSse<T: Decodable & Sendable>(_ type: T.Type, from data: Data, 
     }
 
     var parts: [T] = []
-    var accumulator = SSEEventAccumulator()
+    var accumulator = SSEAccumulator()
     var stoppedAfterEndOfStream = false
 
     // Use explicit CRLF splitting: Swift `Character` may treat `\r\n` as one grapheme, so
@@ -40,7 +40,7 @@ public func decodeSse<T: Decodable & Sendable>(_ type: T.Type, from data: Data, 
 }
 
 private func decodeSseConsume<T: Decodable & Sendable>(
-    _ sse: SSEEvent,
+    _ sse: ServerSentEvent,
     type: T.Type,
     decoder: JSONDecoder,
     parts: inout [T],

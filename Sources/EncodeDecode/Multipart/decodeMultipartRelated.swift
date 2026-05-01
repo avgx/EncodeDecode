@@ -1,8 +1,11 @@
 import Foundation
 
+public func isMultipartRelated(_ contentType: String) -> Bool {
+    return contentType.lowercased().hasPrefix("multipart/related") //TODO: contains? how is better to complain rfc.
+}
+
+/// contentType = "multipart/related; boundary=ngpboundary"
 public func decodeMultipartRelated<T: Decodable & Sendable>(_ type: T.Type, contentType: String, from data: Data, using decoder: JSONDecoder) throws -> [T] {
-    //let contentType = "multipart/related; boundary=ngpboundary"
-    precondition(contentType.hasPrefix("multipart/related"))
 
     guard let boundary = contentType
         .split(separator: ";").last?.trimmingCharacters(in: .whitespaces)

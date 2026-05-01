@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parsed root `Content-Type` for an allowed multipart MJPEG stream.
-struct MultipartContentType: Sendable {
+public struct MultipartContentType: Sendable {
     /// Lowercased root type, e.g. `multipart/x-mixed-replace`.
     public let mediaType: String
     public let boundary: String
@@ -12,10 +12,16 @@ struct MultipartContentType: Sendable {
     ]
 }
 
+public func isMultipartRelated(_ contentType: String) -> Bool {
+    let head = contentType.split(separator: ";", omittingEmptySubsequences: false)
+        .first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() } ?? ""
+    return head == "multipart/related"
+}
+
 /// Parses the root `Content-Type` for multipart streams
 extension MultipartContentType {
     /// Extracts root media type and `boundary` for an allowed multipart kind.
-    static func parse(from contentTypeHeader: String) throws -> MultipartContentType {
+    public static func parse(from contentTypeHeader: String) throws -> MultipartContentType {
         let trimmed = contentTypeHeader.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw MultipartError.invalidRootContentType }
 

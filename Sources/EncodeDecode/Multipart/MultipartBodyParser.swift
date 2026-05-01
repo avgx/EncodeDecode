@@ -1,7 +1,7 @@
 import Foundation
 
 /// Incremental `multipart/*` body parser (RFC 2046 encapsulation boundaries).
-struct MultipartBodyParser: Sendable {
+public struct MultipartBodyParser: Sendable {
     private let dashBoundary: [UInt8]
     private let maxBufferBytes: Int
     private var buf: [UInt8] = []
@@ -12,14 +12,14 @@ struct MultipartBodyParser: Sendable {
     private static let crlfcrlf: [UInt8] = [13, 10, 13, 10]
     private static let lf: [UInt8] = [10]
 
-    init(boundary: String, maxBufferBytes: Int = 8_000_000) {
+    public init(boundary: String, maxBufferBytes: Int = 8_000_000) {
         var dash: [UInt8] = [45, 45]
         dash.append(contentsOf: Array(boundary.utf8))
         self.dashBoundary = dash
         self.maxBufferBytes = maxBufferBytes
     }
 
-    mutating func append(_ chunk: Data) throws -> [MultipartFrame] {
+    public mutating func append(_ chunk: Data) throws -> [MultipartFrame] {
         guard !isClosed else { return [] }
         buf.append(contentsOf: chunk)
         if buf.count > maxBufferBytes {
@@ -34,7 +34,7 @@ struct MultipartBodyParser: Sendable {
     }
 
     /// Called when the URLSession task completes. Incomplete trailing bytes are discarded without an error.
-    mutating func finish(allowIncomplete: Bool = true) throws -> [MultipartFrame] {
+    public mutating func finish(allowIncomplete: Bool = true) throws -> [MultipartFrame] {
         guard !isClosed else { return [] }
         if buf.isEmpty { return [] }
         if allowIncomplete {
@@ -45,7 +45,7 @@ struct MultipartBodyParser: Sendable {
     }
 
     /// After the full entity is in memory, emits one final part when the body ends at EOF without a following encapsulation boundary (common for HTTP responses that omit the closing delimiter).
-    mutating func finishCompleteMultipartBody() throws -> [MultipartFrame] {
+    public mutating func finishCompleteMultipartBody() throws -> [MultipartFrame] {
         guard !isClosed else { return [] }
         guard !buf.isEmpty else { return [] }
 

@@ -1,10 +1,6 @@
 import Foundation
 
-public func isMultipartRelated(_ contentType: String) -> Bool {
-    let head = contentType.split(separator: ";", omittingEmptySubsequences: false)
-        .first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() } ?? ""
-    return head == "multipart/related"
-}
+
 
 /// Decodes JSON objects from each body part of a buffered `multipart/related` entity.
 ///

@@ -9,7 +9,7 @@ Small Swift package for HTTP message bodies: JSON helpers, **Server-Sent Events*
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/<you>/EncodeDecode.git", from: "1.0.0"),
+    .package(url: "https://github.com/avgx/EncodeDecode.git", from: "1.0.0"),
 ],
 targets: [
     .target(name: "YourApp", dependencies: ["EncodeDecode"]),

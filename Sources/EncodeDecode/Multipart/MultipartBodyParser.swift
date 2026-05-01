@@ -44,6 +44,46 @@ struct MultipartBodyParser: Sendable {
         throw MultipartError.unexpectedEndOfStream
     }
 
+    /// After the full entity is in memory, emits one final part when the body ends at EOF without a following encapsulation boundary (common for HTTP responses that omit the closing delimiter).
+    mutating func finishCompleteMultipartBody() throws -> [MultipartFrame] {
+        guard !isClosed else { return [] }
+        guard !buf.isEmpty else { return [] }
+
+        if needsPreambleBoundary {
+            guard let headerStart = findFirstPartHeaderStart() else {
+                throw MultipartError.unexpectedEndOfStream
+            }
+            buf.removeSubrange(0..<headerStart)
+            needsPreambleBoundary = false
+        }
+
+        guard let hdrRange = buf.firstRange(of: Self.crlfcrlf) else {
+            throw MultipartError.malformedPartHeaders
+        }
+        let headers = try Self.parsePartHeaders(Data(buf[0..<hdrRange.lowerBound]))
+        let bodyStart = hdrRange.upperBound
+        guard bodyStart <= buf.count else {
+            throw MultipartError.malformedPartHeaders
+        }
+
+        let body: Data
+        if let n = Self.parseContentLength(from: headers) {
+            guard bodyStart + n <= buf.count else {
+                throw MultipartError.unexpectedEndOfStream
+            }
+            guard bodyStart + n == buf.count else {
+                throw MultipartError.unexpectedBytesAfterPartBoundary
+            }
+            body = Data(buf[bodyStart..<(bodyStart + n)])
+        } else {
+            body = Data(buf[bodyStart..<buf.count])
+        }
+
+        buf.removeAll(keepingCapacity: false)
+        isClosed = true
+        return [MultipartFrame(headers: headers, body: body)]
+    }
+
     private mutating func extractOneFrame() throws -> MultipartFrame? {
         if isClosed { return nil }
 

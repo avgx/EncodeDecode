@@ -1,67 +1,29 @@
 import Foundation
 
 public func isMultipartRelated(_ contentType: String) -> Bool {
-    return contentType.lowercased().hasPrefix("multipart/related") //TODO: contains? how is better to complain rfc.
+    let head = contentType.split(separator: ";", omittingEmptySubsequences: false)
+        .first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() } ?? ""
+    return head == "multipart/related"
 }
 
-/// contentType = "multipart/related; boundary=ngpboundary"
+/// Decodes JSON objects from each body part of a buffered `multipart/related` entity.
+///
+/// Uses ``MultipartContentType`` for the `boundary` parameter and ``MultipartBodyParser`` for RFC 2046 encapsulation.
 public func decodeMultipartRelated<T: Decodable & Sendable>(_ type: T.Type, contentType: String, from data: Data, using decoder: JSONDecoder) throws -> [T] {
+    let parsed = try MultipartContentType.parse(from: contentType)
+    guard parsed.mediaType == "multipart/related" else {
+        throw MultipartError.invalidRootContentType
+    }
 
-    guard let boundary = contentType
-        .split(separator: ";").last?.trimmingCharacters(in: .whitespaces)
-        .split(separator: "=").last else {
-        throw URLError(.badServerResponse)
-    }
-    let split = "\r\n--\(boundary)\r\n"
-    guard let splitedBody = data.splitBy(boundary: split) else {
-        throw URLError(.badServerResponse)
-    }
+    var parser = MultipartBodyParser(boundary: parsed.boundary)
+    var frames = try parser.append(data)
+    frames += try parser.finishCompleteMultipartBody()
+    _ = try parser.finish(allowIncomplete: true)
 
     var parts: [T] = []
-
-    for part in splitedBody {
-        if let obj = part.removingMultipartHeaders() {
-            let decoded = try decoder.decode(T.self, from: obj)
-            parts.append(decoded)
-        }
+    parts.reserveCapacity(frames.count)
+    for frame in frames {
+        parts.append(try decoder.decode(T.self, from: frame.body))
     }
     return parts
-}
-
-extension Data {
-    func splitBy(boundary: String) -> [Data]? {
-        guard let boundaryBytes = boundary.data(using: .utf8) else {
-            return nil
-        }
-
-        var chunks: [Data] = []
-        var pos = startIndex
-
-        while let r = self[pos...].range(of: boundaryBytes) {
-            if r.lowerBound > pos {
-                chunks.append(self[pos..<r.lowerBound])
-            }
-
-            pos = r.upperBound
-        }
-
-        if pos < endIndex {
-            chunks.append(self[pos...])
-        }
-        return chunks
-    }
-
-    func removingMultipartHeaders() -> Data? {
-        let LF = "\r\n"
-        let LFLF = (LF + LF).data(using: .utf8)!
-
-        if let r = self.range(of: LFLF) {
-            if r.upperBound < endIndex {
-                let body = self[r.upperBound...]
-                return body
-            }
-        }
-
-        return nil
-    }
 }

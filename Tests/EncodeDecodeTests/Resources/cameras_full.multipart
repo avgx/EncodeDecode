@@ -1,0 +1,33 @@
+
+--ngpboundary
+Content-Type: application/json; charset=utf-8
+
+{
+ "items": [
+  {
+   "access_point": "hosts/DESKTOP-MDSRA6D/DeviceIpint.1/SourceEndpoint.video:0:0",
+   "display_name": "Stairs",
+   "display_id": "1"
+  },
+  {
+   "access_point": "hosts/DESKTOP-MDSRA6D/DeviceIpint.10/SourceEndpoint.video:0:0",
+   "display_name": "Playground view",
+   "display_id": "10.0"
+  },
+  {
+   "access_point": "hosts/DESKTOP-MDSRA6D/DeviceIpint.53/SourceEndpoint.video:0:0",
+   "display_name": "Stage 53",
+   "display_id": "53"
+  }
+ ],
+ "next_page_token": ""
+}
+
+--ngpboundary
+Content-Type: application/json; charset=utf-8
+Content-Length: 41
+
+{
+ "items": [],
+ "next_page_token": ""
+}

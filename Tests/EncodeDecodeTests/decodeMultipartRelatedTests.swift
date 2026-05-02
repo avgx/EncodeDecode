@@ -102,3 +102,27 @@ private struct PartModel: Codable, Sendable, Equatable {
     let parts = try decodeMultipartRelated(PartModel.self, contentType: contentType, from: body, using: JSONDecoder())
     #expect(parts == [PartModel(name: "first"), PartModel(name: "second")])
 }
+
+@Test func decodeMultipartRelated_page2_twoStreamDataChunks() throws {
+    let url = try #require(Bundle.module.url(forResource: "cameras_page2", withExtension: "multipart"))
+    let data = try Data(contentsOf: url)
+    let pages = try decodeMultipartRelated(CameraListPage.self, contentType: "multipart/related; boundary=ngpboundary", from: data, using: JSONDecoder())
+
+    // Fixture has three LF-terminated parts (list + two trailing empty pages).
+    #expect(pages.count == 3)
+    #expect(pages[0].items.count == 2)
+    #expect(pages[1].items.isEmpty)
+    #expect(pages[2].items.isEmpty)
+    #expect(pages[0].items.contains { $0.display_name == "Stairs" })
+}
+
+@Test func decodeMultipartRelated_full_singleLargeChunk() throws {
+    let url = try #require(Bundle.module.url(forResource: "cameras_full", withExtension: "multipart"))
+    let data = try Data(contentsOf: url)
+    let pages = try decodeMultipartRelated(CameraListPage.self, contentType: "multipart/related; boundary=ngpboundary", from: data, using: JSONDecoder())
+
+    // Main list plus a trailing empty JSON part (same as live list tail responses).
+    #expect(pages.count == 2)
+    #expect(pages[0].items.count > 2)
+    #expect(pages[1].items.isEmpty)
+}

@@ -11,6 +11,19 @@ public struct MultipartBodyParser: Sendable {
     private static let crlf: [UInt8] = [13, 10]
     private static let crlfcrlf: [UInt8] = [13, 10, 13, 10]
     private static let lf: [UInt8] = [10]
+    private static let lflf: [UInt8] = [10, 10]
+
+    /// End of MIME part headers: canonical `\r\n\r\n`, or `\n\n` for LF-only payloads (common on disk / some servers).
+    private static func headerBodySeparatorRange(in buf: [UInt8]) -> Range<Int>? {
+        let cr = buf.firstRange(of: crlfcrlf)
+        let lf = buf.firstRange(of: lflf)
+        switch (cr, lf) {
+        case (nil, nil): return nil
+        case let (c?, nil): return c
+        case (nil, let l?): return l
+        case let (c?, l?): return c.lowerBound <= l.lowerBound ? c : l
+        }
+    }
 
     public init(boundary: String, maxBufferBytes: Int = 8_000_000) {
         var dash: [UInt8] = [45, 45]
@@ -57,7 +70,7 @@ public struct MultipartBodyParser: Sendable {
             needsPreambleBoundary = false
         }
 
-        guard let hdrRange = buf.firstRange(of: Self.crlfcrlf) else {
+        guard let hdrRange = Self.headerBodySeparatorRange(in: buf) else {
             throw MultipartError.malformedPartHeaders
         }
         let headers = try Self.parsePartHeaders(Data(buf[0..<hdrRange.lowerBound]))
@@ -93,7 +106,7 @@ public struct MultipartBodyParser: Sendable {
             needsPreambleBoundary = false
         }
 
-        guard let hdrRange = buf.firstRange(of: Self.crlfcrlf) else { return nil }
+        guard let hdrRange = Self.headerBodySeparatorRange(in: buf) else { return nil }
         let headersSlice = buf[0..<hdrRange.lowerBound]
         let bodyStart = hdrRange.upperBound
         guard bodyStart <= buf.count else { return nil }

@@ -6,16 +6,7 @@ private struct DecodeModel: Codable, Sendable, Equatable {
     let name: String
 }
 
-/// Subset of Axxon list payload; unknown JSON keys are ignored.
-private struct CameraListPage: Codable, Sendable, Equatable {
-    struct Item: Codable, Sendable, Equatable {
-        let display_name: String?
-        let display_id: String?
-    }
 
-    let items: [Item]
-    let next_page_token: String?
-}
 
 @Test func bodyDecodeSSE_accumulator_multilineData_joinsWithNewline() {
     var acc = SSEAccumulator()

@@ -8,15 +8,21 @@ public struct MultipartBodyParser: Sendable {
     private var needsPreambleBoundary = true
     private var isClosed = false
 
-    private static let crlf: [UInt8] = [13, 10]
-    private static let crlfcrlf: [UInt8] = [13, 10, 13, 10]
-    private static let lf: [UInt8] = [10]
-    private static let lflf: [UInt8] = [10, 10]
+    private enum Bytes {
+        static let CR: UInt8 = 0x0D
+        static let LF: UInt8 = 0x0A
+        static let DASH: UInt8 = 0x2D
+
+        static let CRLF: [UInt8] = [CR, LF]
+        static let LFLF: [UInt8] = [LF, LF]
+        static let CRLFCRLF: [UInt8] = CRLF + CRLF
+        static let DASHDASH: [UInt8] = [DASH, DASH]
+    }
 
     /// End of MIME part headers: canonical `\r\n\r\n`, or `\n\n` for LF-only payloads (common on disk / some servers).
     private static func headerBodySeparatorRange(in buf: [UInt8]) -> Range<Int>? {
-        let cr = buf.firstRange(of: crlfcrlf)
-        let lf = buf.firstRange(of: lflf)
+        let cr = buf.firstRange(of: Bytes.CRLFCRLF)
+        let lf = buf.firstRange(of: Bytes.LFLF)
         switch (cr, lf) {
         case (nil, nil): return nil
         case let (c?, nil): return c
@@ -26,8 +32,8 @@ public struct MultipartBodyParser: Sendable {
     }
 
     public init(boundary: String, maxBufferBytes: Int = 8_000_000) {
-        var dash: [UInt8] = [45, 45]
-        dash.append(contentsOf: Array(boundary.utf8))
+        var dash = Bytes.DASHDASH
+        dash.append(contentsOf: boundary.utf8)
         self.dashBoundary = dash
         self.maxBufferBytes = maxBufferBytes
     }
@@ -114,8 +120,8 @@ public struct MultipartBodyParser: Sendable {
         let headers = try Self.parsePartHeaders(Data(headersSlice))
         let cl = Self.parseContentLength(from: headers)
 
-        let crlfNeedle = Self.crlf + dashBoundary
-        let lfNeedle = Self.lf + dashBoundary
+        let crlfNeedle = Bytes.CRLF + dashBoundary
+        let lfNeedle = [Bytes.LF] + dashBoundary
         let endIdx: Int
         let needleLen: Int
         if let n = cl {
@@ -152,26 +158,26 @@ public struct MultipartBodyParser: Sendable {
         }
 
         let b0 = buf[afterDelimiter]
-        if b0 == 45 {
+        if b0 == Bytes.DASH {
             guard afterDelimiter + 1 < buf.count else { return nil }
-            guard buf[afterDelimiter + 1] == 45 else {
+            guard buf[afterDelimiter + 1] == Bytes.DASH else {
                 throw MultipartError.unexpectedBytesAfterPartBoundary
             }
             var cut = afterDelimiter + 2
-            if cut + 1 < buf.count, buf[cut] == 13, buf[cut + 1] == 10 {
+            if cut + 1 < buf.count, buf[cut] == Bytes.CR, buf[cut + 1] == Bytes.LF {
                 cut += 2
-            } else if cut < buf.count, buf[cut] == 10 {
+            } else if cut < buf.count, buf[cut] == Bytes.LF {
                 cut += 1
             }
             buf.removeSubrange(0..<cut)
             isClosed = true
-        } else if b0 == 13 {
+        } else if b0 == Bytes.CR {
             guard afterDelimiter + 1 < buf.count else { return nil }
-            guard buf[afterDelimiter + 1] == 10 else {
+            guard buf[afterDelimiter + 1] == Bytes.LF else {
                 throw MultipartError.unexpectedBytesAfterPartBoundary
             }
             buf.removeSubrange(0..<afterDelimiter + 2)
-        } else if b0 == 10 {
+        } else if b0 == Bytes.LF {
             buf.removeSubrange(0..<afterDelimiter + 1)
         } else {
             throw MultipartError.unexpectedBytesAfterPartBoundary
@@ -194,21 +200,21 @@ public struct MultipartBodyParser: Sendable {
     private func findFirstPartHeaderStart() -> Int? {
         if buf.count >= dashBoundary.count + 2,
            Array(buf[0..<dashBoundary.count]) == dashBoundary,
-           buf[dashBoundary.count] == 13, buf[dashBoundary.count + 1] == 10
+           buf[dashBoundary.count] == Bytes.CR, buf[dashBoundary.count + 1] == Bytes.LF
         {
             return dashBoundary.count + 2
         }
         if buf.count >= dashBoundary.count + 1,
            Array(buf[0..<dashBoundary.count]) == dashBoundary,
-           buf[dashBoundary.count] == 10
+           buf[dashBoundary.count] == Bytes.LF
         {
             return dashBoundary.count + 1
         }
-        let patCRLF = Self.crlf + dashBoundary + Self.crlf
+        let patCRLF = Bytes.CRLF + dashBoundary + Bytes.CRLF
         if buf.count >= patCRLF.count, let r = buf.firstRange(of: patCRLF) {
             return r.upperBound
         }
-        let patLF = Self.lf + dashBoundary + Self.lf
+        let patLF = [Bytes.LF] + dashBoundary + [Bytes.LF]
         if buf.count >= patLF.count, let r = buf.firstRange(of: patLF) {
             return r.upperBound
         }

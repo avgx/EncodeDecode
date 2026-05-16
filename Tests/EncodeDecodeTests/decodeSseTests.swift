@@ -48,6 +48,19 @@ private struct DecodeModel: Codable, Sendable, Equatable {
     #expect(out == [DecodeModel(name: "crlf")])
 }
 
+@Test func bodyDecodeSSE_backToBackEventsWithoutBlankLine_decodesStreamData() throws {
+    let crlf = "\r\n"
+    let text =
+        "event: stream-data" + crlf
+        + "data: {\"name\":\"only\"}" + crlf
+        + "event: end-of-stream" + crlf
+        + "data: {\"name\":\"ignored\"}" + crlf
+    let body = Data(text.utf8)
+
+    let out = try decodeSse(DecodeModel.self, from: body, using: JSONDecoder())
+    #expect(out == [DecodeModel(name: "only")])
+}
+
 @Test func bodyDecodeSSE_endOfStream_stopsProcessingTail() throws {
     let body = """
     event: stream-data

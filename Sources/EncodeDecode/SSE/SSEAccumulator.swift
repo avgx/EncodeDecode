@@ -29,6 +29,10 @@ public struct SSEAccumulator: Sendable {
         case "id":
             id = value
         case "event":
+            if let pending = takePendingEvent() {
+                event = value
+                return pending
+            }
             event = value
         case "data":
             dataLines.append(value)
@@ -47,5 +51,15 @@ public struct SSEAccumulator: Sendable {
         id = nil
         event = nil
         dataLines = []
+    }
+
+    /// Some servers omit the blank line between consecutive events; flush the buffered block before the next `event:` field.
+    private mutating func takePendingEvent() -> ServerSentEvent? {
+        guard event != nil || !dataLines.isEmpty else { return nil }
+        let pending = ServerSentEvent(id: id, event: event, data: dataLines.joined(separator: "\n"))
+        id = nil
+        event = nil
+        dataLines = []
+        return pending
     }
 }

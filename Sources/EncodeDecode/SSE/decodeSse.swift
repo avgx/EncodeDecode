@@ -49,7 +49,16 @@ private func decodeSseConsume<T: Decodable & Sendable>(
     switch sse.event {
     case "stream-data":
         let payload = Data(sse.data.utf8)
-        parts.append(try decoder.decode(T.self, from: payload))
+        do {
+            parts.append(try decoder.decode(T.self, from: payload))
+        } catch {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [],
+                    debugDescription: "SSE stream-data decode failed for event `\(sse.event ?? "stream-data")`: \(error)"
+                )
+            )
+        }
     case "grpc-error":
         throw URLError(.badServerResponse, userInfo: ["grpc-error": sse.data])
     case "end-of-stream":

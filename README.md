@@ -35,6 +35,22 @@ let dto: MyDTO = try await decodeBody(data, using: JSONDecoder())
 let maybe: MyDTO? = try await decodeBody(Data(), using: JSONDecoder()) // nil
 ```
 
+### Decoding errors
+
+When JSON schema does not match your `Decodable` model, use `DecodingError.readableDescription` (structured: `summary`, `path`, `details`) or `humanReadableDescription` (formatted text for logging):
+
+```swift
+do {
+    let pages = try decodeMultipartRelated(CameraPage.self, contentType: ct, from: data, using: JSONDecoder())
+} catch let error as DecodingError {
+    logger.error("\(error.humanReadableDescription)")
+    // e.g. Missing required key "incomplete"
+    //      Path: items[0].archive_bindings[0].archive
+}
+```
+
+`decodeBody` and `decodeMultipartRelated` rethrow the original `DecodingError` so you can still pattern-match on `.keyNotFound`, `.typeMismatch`, etc. Transport-level failures (`MultipartError`, `URLError` from SSE/grpc-error) are separate from JSON decoding issues.
+
 ## Server-Sent Events (`decodeSse`)
 
 For bodies with `Content-Type: text/event-stream`. Line assembly follows the [WHATWG SSE](https://html.spec.whatwg.org/multipage/server-sent-events.html) model; bodies are split on `\r\n` when present so CRLF-only streams parse correctly.

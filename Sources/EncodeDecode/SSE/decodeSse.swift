@@ -51,6 +51,13 @@ private func decodeSseConsume<T: Decodable & Sendable>(
         let payload = Data(sse.data.utf8)
         do {
             parts.append(try decoder.decode(T.self, from: payload))
+        } catch let error as DecodingError {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [],
+                    debugDescription: "SSE stream-data decode failed: \(error.readableDescription.description)"
+                )
+            )
         } catch {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(

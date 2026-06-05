@@ -102,15 +102,12 @@ private func decodeError<T: Decodable>(_ type: T.Type, from json: String) -> Dec
     do {
         _ = try decodeSse(NameModel.self, from: body, using: JSONDecoder())
         Issue.record("expected decode to fail")
-    } catch let error as DecodingError {
-        if case let .dataCorrupted(context) = error {
-            #expect(context.debugDescription.contains("SSE stream-data decode failed:"))
-            #expect(context.debugDescription.contains("Type mismatch"))
-            #expect(context.debugDescription.contains("Path:"))
-        } else {
-            Issue.record("expected dataCorrupted, got \(error)")
-        }
+    } catch let error as BodyDecodeError {
+        #expect(error.payload == "{\"name\":123}")
+        #expect(error.decodingError.readableDescription.summary.hasPrefix("Type mismatch for"))
+        #expect(error.description.contains("Path:"))
+        #expect(error.description.contains("Payload:"))
     } catch {
-        Issue.record("expected DecodingError, got \(error)")
+        Issue.record("expected BodyDecodeError, got \(error)")
     }
 }

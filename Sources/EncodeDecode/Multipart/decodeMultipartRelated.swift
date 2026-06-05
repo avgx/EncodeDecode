@@ -19,7 +19,12 @@ public func decodeMultipartRelated<T: Decodable & Sendable>(_ type: T.Type, cont
     var parts: [T] = []
     parts.reserveCapacity(frames.count)
     for frame in frames {
-        parts.append(try decoder.decode(T.self, from: frame.body))
+        do {
+            parts.append(try decoder.decode(T.self, from: frame.body))
+        } catch let error as DecodingError {
+            let payload = String(data: frame.body, encoding: .utf8) ?? "<\(frame.body.count) bytes>"
+            throw BodyDecodeError(payload: payload, decodingError: error)
+        }
     }
     return parts
 }

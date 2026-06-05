@@ -42,7 +42,12 @@ public func decodeBody<T: Decodable & Sendable>(_ data: Data, using decoder: JSO
     // Decode JSON asynchronously to avoid blocking the current thread
     else {
         return try await Task.detached {
-            try decoder.decode(T.self, from: data)
+            do {
+                return try decoder.decode(T.self, from: data)
+            } catch let error as DecodingError {
+                let payload = String(data: data, encoding: .utf8) ?? "<\(data.count) bytes>"
+                throw BodyDecodeError(payload: payload, decodingError: error)
+            }
         }.value
     }
 }

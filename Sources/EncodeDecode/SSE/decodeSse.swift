@@ -52,17 +52,15 @@ private func decodeSseConsume<T: Decodable & Sendable>(
         do {
             parts.append(try decoder.decode(T.self, from: payload))
         } catch let error as DecodingError {
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: [],
-                    debugDescription: "SSE stream-data decode failed: \(error.readableDescription.description)"
-                )
-            )
+            throw BodyDecodeError(payload: sse.data, decodingError: error)
         } catch {
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: [],
-                    debugDescription: "SSE stream-data decode failed for event `\(sse.event ?? "stream-data")`: \(error)"
+            throw BodyDecodeError(
+                payload: sse.data,
+                decodingError: .dataCorrupted(
+                    DecodingError.Context(
+                        codingPath: [],
+                        debugDescription: "SSE stream-data decode failed for event `\(sse.event ?? "stream-data")`: \(error)"
+                    )
                 )
             )
         }

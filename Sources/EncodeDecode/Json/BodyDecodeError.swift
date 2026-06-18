@@ -30,6 +30,9 @@ public extension Error {
         if let decodingError = self as? DecodingError {
             return decodingError.humanReadableDescription
         }
+        if let multipartError = self as? MultipartError {
+            return multipartError.humanReadableDescription
+        }
         return String(describing: self)
     }
 }

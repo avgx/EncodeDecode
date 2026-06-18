@@ -31,12 +31,20 @@ public struct MultipartBodyParser: Sendable {
         }
     }
 
+    private static func locatePartHeadersEnd(in buf: [UInt8]) -> (headerEnd: Int, bodyStart: Int)? {
+        guard let hdrRange = headerBodySeparatorRange(in: buf) else { return nil }
+        return (hdrRange.lowerBound, hdrRange.upperBound)
+    }
+
     public init(boundary: String, maxBufferBytes: Int = 8_000_000) {
         var dash = Bytes.DASHDASH
         dash.append(contentsOf: boundary.utf8)
         self.dashBoundary = dash
         self.maxBufferBytes = maxBufferBytes
     }
+
+    /// Unparsed bytes still in the parser buffer.
+    public var pendingBytes: Data { Data(buf) }
 
     public mutating func append(_ chunk: Data) throws -> [MultipartFrame] {
         guard !isClosed else { return [] }
@@ -76,11 +84,11 @@ public struct MultipartBodyParser: Sendable {
             needsPreambleBoundary = false
         }
 
-        guard let hdrRange = Self.headerBodySeparatorRange(in: buf) else {
-            throw MultipartError.malformedPartHeaders
+        guard let located = Self.locatePartHeadersEnd(in: buf) else {
+            throw MultipartError.unconsumedTrailingBytes(count: buf.count)
         }
-        let headers = try Self.parsePartHeaders(Data(buf[0..<hdrRange.lowerBound]))
-        let bodyStart = hdrRange.upperBound
+        let headers = try Self.parsePartHeaders(Data(buf[0..<located.headerEnd]))
+        let bodyStart = located.bodyStart
         guard bodyStart <= buf.count else {
             throw MultipartError.malformedPartHeaders
         }
@@ -112,9 +120,9 @@ public struct MultipartBodyParser: Sendable {
             needsPreambleBoundary = false
         }
 
-        guard let hdrRange = Self.headerBodySeparatorRange(in: buf) else { return nil }
-        let headersSlice = buf[0..<hdrRange.lowerBound]
-        let bodyStart = hdrRange.upperBound
+        guard let located = Self.locatePartHeadersEnd(in: buf) else { return nil }
+        let headersSlice = buf[0..<located.headerEnd]
+        let bodyStart = located.bodyStart
         guard bodyStart <= buf.count else { return nil }
 
         let headers = try Self.parsePartHeaders(Data(headersSlice))
@@ -126,24 +134,27 @@ public struct MultipartBodyParser: Sendable {
         let needleLen: Int
         if let n = cl {
             guard bodyStart + n <= buf.count else { return nil }
-            endIdx = bodyStart + n
-            if endIdx + crlfNeedle.count <= buf.count,
-               Array(buf[endIdx..<(endIdx + crlfNeedle.count)]) == crlfNeedle
-            {
-                needleLen = crlfNeedle.count
-            } else if endIdx + lfNeedle.count <= buf.count,
-                      Array(buf[endIdx..<(endIdx + lfNeedle.count)]) == lfNeedle
-            {
-                needleLen = lfNeedle.count
-            } else {
+            let clEnd = bodyStart + n
+            guard let boundary = findNextBoundary(from: bodyStart, crlfNeedle: crlfNeedle, lfNeedle: lfNeedle) else {
+                if clEnd < buf.count {
+                    throw MultipartError.unexpectedBytesAfterPartBoundary
+                }
                 return nil
             }
-        } else if let e = buf.indexOf(crlfNeedle, startingAt: bodyStart) {
-            endIdx = e
-            needleLen = crlfNeedle.count
-        } else if let e = buf.indexOf(lfNeedle, startingAt: bodyStart) {
-            endIdx = e
-            needleLen = lfNeedle.count
+            if boundary.index < clEnd {
+                throw MultipartError.boundaryBeforeContentLengthEnd(
+                    contentLength: n,
+                    boundaryOffset: boundary.index - bodyStart
+                )
+            }
+            guard boundary.index == clEnd else {
+                throw MultipartError.unexpectedBytesAfterPartBoundary
+            }
+            endIdx = boundary.index
+            needleLen = boundary.needleLen
+        } else if let boundary = findNextBoundary(from: bodyStart, crlfNeedle: crlfNeedle, lfNeedle: lfNeedle) {
+            endIdx = boundary.index
+            needleLen = boundary.needleLen
         } else {
             return nil
         }
@@ -186,6 +197,16 @@ public struct MultipartBodyParser: Sendable {
         return MultipartFrame(headers: headers, body: body)
     }
 
+    private func findNextBoundary(from bodyStart: Int, crlfNeedle: [UInt8], lfNeedle: [UInt8]) -> (index: Int, needleLen: Int)? {
+        if let e = buf.indexOf(crlfNeedle, startingAt: bodyStart) {
+            return (e, crlfNeedle.count)
+        }
+        if let e = buf.indexOf(lfNeedle, startingAt: bodyStart) {
+            return (e, lfNeedle.count)
+        }
+        return nil
+    }
+
     private static func parseContentLength(from headers: [String: String]) -> Int? {
         guard let raw = headers["content-length"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty,
@@ -225,8 +246,14 @@ public struct MultipartBodyParser: Sendable {
         guard let s = String(data: data, encoding: .isoLatin1) else {
             throw MultipartError.malformedPartHeaders
         }
+        // Split on explicit CRLF when present: Swift `Character` `\n` splitting does not break `\r\n` lines apart.
+        let lines: [Substring] = if s.contains("\r\n") {
+            s.split(separator: "\r\n", omittingEmptySubsequences: false)
+        } else {
+            s.split(separator: "\n", omittingEmptySubsequences: false)
+        }
         var out: [String: String] = [:]
-        for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
+        for line in lines {
             let t = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if t.isEmpty { continue }
             if t.first == " " || t.first == "\t" { continue }

@@ -126,3 +126,72 @@ private struct PartModel: Codable, Sendable, Equatable {
     #expect(pages[0].items.count > 2)
     #expect(pages[1].items.isEmpty)
 }
+
+@Test func decodeMultipartRelated_crlfHeadersWithContentLength() throws {
+    let boundary = "crlfb"
+    let contentType = "multipart/related; boundary=\(boundary)"
+    let json = #"{"name":"crlf"}"#
+    var body = Data()
+    body.append(contentsOf: "\r\n--\(boundary)\r\nContent-Type: application/json\r\nContent-Length: \(json.utf8.count)\r\n\r\n".utf8)
+    body.append(Data(json.utf8))
+
+    let parts = try decodeMultipartRelated(PartModel.self, contentType: contentType, from: body, using: JSONDecoder())
+    #expect(parts == [PartModel(name: "crlf")])
+}
+
+@Test func decodeMultipartRelated_malformed_raceCorruptedBody() throws {
+    let url = try #require(Bundle.module.url(forResource: "cameras_malformed", withExtension: "multipart"))
+    let data = try Data(contentsOf: url)
+
+    #expect(throws: MultipartError.boundaryBeforeContentLengthEnd(contentLength: 300, boundaryOffset: 175)) {
+        try decodeMultipartRelated(
+            CameraListPage.self,
+            contentType: "multipart/related; boundary=ngpboundary",
+            from: data,
+            using: JSONDecoder()
+        )
+    }
+}
+
+@Test func decodeMultipartRelated_malformed_continuationAfterContentLengthPart() throws {
+    let boundary = "mb"
+    let contentType = "multipart/related; boundary=\(boundary)"
+    let page = #"{"items":[],"next_page_token":""}"#
+    var body = Data()
+    body.append(contentsOf: "\r\n--\(boundary)\r\nContent-Type: application/json\r\nContent-Length: \(page.utf8.count)\r\n\r\n".utf8)
+    body.append(Data(page.utf8))
+    body.append(Data(#"{"items":[]}"#.utf8))
+
+    #expect(throws: MultipartError.unexpectedBytesAfterPartBoundary) {
+        try decodeMultipartRelated(CameraListPage.self, contentType: contentType, from: body, using: JSONDecoder())
+    }
+}
+
+@Test func decodeMultipartRelated_jsonFailureUsesReadableDescription() throws {
+    let boundary = "errb"
+    let contentType = "multipart/related; boundary=\(boundary)"
+    var body = Data()
+    body.append(contentsOf: "\r\n--\(boundary)\r\nContent-Type: application/json\r\n\r\n".utf8)
+    body.append(Data(#"{"name":123}"#.utf8))
+
+    do {
+        _ = try decodeMultipartRelated(NameModel.self, contentType: contentType, from: body, using: JSONDecoder())
+        Issue.record("expected decode to fail")
+    } catch let error as BodyDecodeError {
+        #expect(error.payload == "{\"name\":123}")
+        #expect(error.decodingError.readableDescription.summary.hasPrefix("Type mismatch for"))
+        #expect(error.description.contains("Path:"))
+        #expect(error.description.contains("Payload:"))
+    } catch {
+        Issue.record("expected BodyDecodeError, got \(error)")
+    }
+}
+
+@Test func multipartError_domainLoadFailureLogMessage_isReadable() {
+    let message = MultipartError.malformedPartHeaders.domainLoadFailureLogMessage
+    #expect(message.contains("Multipart part headers"))
+}
+
+private struct NameModel: Codable, Sendable {
+    let name: String
+}

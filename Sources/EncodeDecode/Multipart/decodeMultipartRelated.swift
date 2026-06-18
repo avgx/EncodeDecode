@@ -14,6 +14,10 @@ public func decodeMultipartRelated<T: Decodable & Sendable>(_ type: T.Type, cont
     var parser = MultipartBodyParser(boundary: parsed.boundary)
     var frames = try parser.append(data)
     frames += try parser.finishCompleteMultipartBody()
+    let trailing = parser.pendingBytes
+    guard trailing.isEmpty else {
+        throw MultipartError.unconsumedTrailingBytes(count: trailing.count)
+    }
     _ = try parser.finish(allowIncomplete: true)
 
     var parts: [T] = []
